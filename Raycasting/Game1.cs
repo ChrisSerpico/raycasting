@@ -43,17 +43,20 @@ namespace Raycasting
         // pixel texture used to draw lines
         Texture2D pix; 
 
-        // player
+        // player representation
         protected Player player;
 
-        // map
+        // map representation 
         protected Map level;
 
         // mouse states, used for looking around 
         MouseState mState;
 
-        // texture array
+        // texture array, each element is a separate square texture
         Texture2D[] texture = new Texture2D[NUM_TEXTURES];
+
+        // sprite font for writing text
+        protected SpriteFont font; 
 
         public Game1()
         {
@@ -102,6 +105,9 @@ namespace Raycasting
             texture[5] = Content.Load<Texture2D>("terrain/graybookshelf");
             texture[6] = Content.Load<Texture2D>("terrain/graywindow");
             texture[7] = Content.Load<Texture2D>("terrain/graywarningdoor");
+
+            // load font
+            font = Content.Load<SpriteFont>("General");
         }
 
         /// <summary>
@@ -136,6 +142,7 @@ namespace Raycasting
             double moveSpeed = frameTime * SPEED_MOD;
             double rotSpeed = frameTime * ROTATION_MOD;  // rotation speed 
 
+            // TODO: split input code out into its own method
             // Input
             if(Keyboard.GetState().IsKeyDown(Keys.W))
             {
@@ -171,10 +178,11 @@ namespace Raycasting
             // rotate right
             double oldDirX = player.direction.X;
             player.direction.X = (float) (player.direction.X * Math.Cos(-rotSpeed * mouseDisplacement) - player.direction.Y * Math.Sin(-rotSpeed * mouseDisplacement));
-            player.direction.Y = (float)(oldDirX * Math.Sin(-rotSpeed * mouseDisplacement) + player.direction.Y * Math.Cos(-rotSpeed * mouseDisplacement));
+            player.direction.Y = (float) (oldDirX * Math.Sin(-rotSpeed * mouseDisplacement) + player.direction.Y * Math.Cos(-rotSpeed * mouseDisplacement));
             double oldPlaneX = player.cameraPlane.X;
-            player.cameraPlane.X = (float)(player.cameraPlane.X * Math.Cos(-rotSpeed * mouseDisplacement) - player.cameraPlane.Y * Math.Sin(-rotSpeed * mouseDisplacement));
-            player.cameraPlane.Y = (float)(oldPlaneX * Math.Sin(-rotSpeed * mouseDisplacement) + player.cameraPlane.Y * Math.Cos(-rotSpeed * mouseDisplacement));
+            player.cameraPlane.X = (float) (player.cameraPlane.X * Math.Cos(-rotSpeed * mouseDisplacement) - player.cameraPlane.Y * Math.Sin(-rotSpeed * mouseDisplacement));
+            player.cameraPlane.Y = (float) (oldPlaneX * Math.Sin(-rotSpeed * mouseDisplacement) + player.cameraPlane.Y * Math.Cos(-rotSpeed * mouseDisplacement));
+
 
             base.Update(gameTime);
         }
@@ -187,9 +195,16 @@ namespace Raycasting
         {
             GraphicsDevice.Clear(Color.Black);
 
+            // BEGIN DRAWING
             spriteBatch.Begin();
+
             Raycast(player, level, spriteBatch);  // draw geometry
-            // spriteBatch.DrawString()
+
+            // calculate fps
+            float frameRate = 1 / (float)gameTime.ElapsedGameTime.TotalSeconds;
+            spriteBatch.DrawString(font, frameRate.ToString(), new Vector2(0, 0), Color.White);
+            
+            // END DRAWING
             spriteBatch.End();
 
             base.Draw(gameTime);
