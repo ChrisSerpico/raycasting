@@ -21,6 +21,13 @@ namespace Raycasting
         public static double SPEED_MOD = 5.0;
         public static double ROTATION_MOD = .05;
 
+        // Texture width and height
+        public static int TEXTURE_WIDTH = 72;
+        public static int TEXTURE_HEIGHT = 72;
+
+        // the number of textures used in-game
+        public static int NUM_TEXTURES = 8;
+
         // VARIABLES
         /////
 
@@ -44,6 +51,9 @@ namespace Raycasting
 
         // mouse states, used for looking around 
         MouseState mState;
+
+        // texture array
+        Texture2D[] texture = new Texture2D[NUM_TEXTURES];
 
         public Game1()
         {
@@ -84,6 +94,14 @@ namespace Raycasting
 
             // load textures
             pix = Content.Load<Texture2D>("dot");
+            texture[0] = Content.Load<Texture2D>("terrain/grayvat");
+            texture[1] = Content.Load<Texture2D>("terrain/redwall");
+            texture[2] = Content.Load<Texture2D>("terrain/damagedgraywall");
+            texture[3] = Content.Load<Texture2D>("terrain/graywall");
+            texture[4] = Content.Load<Texture2D>("terrain/bluewall");
+            texture[5] = Content.Load<Texture2D>("terrain/graybookshelf");
+            texture[6] = Content.Load<Texture2D>("terrain/graywindow");
+            texture[7] = Content.Load<Texture2D>("terrain/graywarningdoor");
         }
 
         /// <summary>
@@ -151,25 +169,12 @@ namespace Raycasting
             // both camera direction and camera plane must be rotated
             double mouseDisplacement = mState.X - SCREEN_WIDTH / 2;
             // rotate right
-            if(mouseDisplacement > 0)
-            {
-                double oldDirX = player.direction.X;
-                player.direction.X = (float) (player.direction.X * Math.Cos(-rotSpeed * mouseDisplacement) - player.direction.Y * Math.Sin(-rotSpeed * mouseDisplacement));
-                player.direction.Y = (float)(oldDirX * Math.Sin(-rotSpeed * mouseDisplacement) + player.direction.Y * Math.Cos(-rotSpeed * mouseDisplacement));
-                double oldPlaneX = player.cameraPlane.X;
-                player.cameraPlane.X = (float)(player.cameraPlane.X * Math.Cos(-rotSpeed * mouseDisplacement) - player.cameraPlane.Y * Math.Sin(-rotSpeed * mouseDisplacement));
-                player.cameraPlane.Y = (float)(oldPlaneX * Math.Sin(-rotSpeed * mouseDisplacement) + player.cameraPlane.Y * Math.Cos(-rotSpeed * mouseDisplacement));
-            }
-            // rotate left
-            else if(mouseDisplacement < 0)
-            {
-                double oldDirX = player.direction.X;
-                player.direction.X = (float)(player.direction.X * Math.Cos(-rotSpeed * mouseDisplacement) - player.direction.Y * Math.Sin(-rotSpeed * mouseDisplacement));
-                player.direction.Y = (float)(oldDirX * Math.Sin(-rotSpeed * mouseDisplacement) + player.direction.Y * Math.Cos(-rotSpeed * mouseDisplacement));
-                double oldPlaneX = player.cameraPlane.X;
-                player.cameraPlane.X = (float)(player.cameraPlane.X * Math.Cos(-rotSpeed * mouseDisplacement) - player.cameraPlane.Y * Math.Sin(-rotSpeed * mouseDisplacement));
-                player.cameraPlane.Y = (float)(oldPlaneX * Math.Sin(-rotSpeed * mouseDisplacement) + player.cameraPlane.Y * Math.Cos(-rotSpeed * mouseDisplacement));
-            }
+            double oldDirX = player.direction.X;
+            player.direction.X = (float) (player.direction.X * Math.Cos(-rotSpeed * mouseDisplacement) - player.direction.Y * Math.Sin(-rotSpeed * mouseDisplacement));
+            player.direction.Y = (float)(oldDirX * Math.Sin(-rotSpeed * mouseDisplacement) + player.direction.Y * Math.Cos(-rotSpeed * mouseDisplacement));
+            double oldPlaneX = player.cameraPlane.X;
+            player.cameraPlane.X = (float)(player.cameraPlane.X * Math.Cos(-rotSpeed * mouseDisplacement) - player.cameraPlane.Y * Math.Sin(-rotSpeed * mouseDisplacement));
+            player.cameraPlane.Y = (float)(oldPlaneX * Math.Sin(-rotSpeed * mouseDisplacement) + player.cameraPlane.Y * Math.Cos(-rotSpeed * mouseDisplacement));
 
             base.Update(gameTime);
         }
@@ -277,12 +282,13 @@ namespace Raycasting
 
                 // calculate lowest and highest pixel to fill in current stripe 
                 int drawStart = (-lineHeight) / 2 + SCREEN_HEIGHT / 2;
-                if (drawStart < 0)
-                    drawStart = 0;
+                //if (drawStart < 0)
+                //    drawStart = 0;
                 int drawEnd = lineHeight / 2 + SCREEN_HEIGHT / 2;
-                if (drawEnd >= SCREEN_HEIGHT)
-                    drawEnd = SCREEN_HEIGHT - 1;
+                //if (drawEnd >= SCREEN_HEIGHT)
+                //    drawEnd = SCREEN_HEIGHT - 1;
 
+                /* NOT USED WITH TEXTURED RAYCASTER
                 // choose wall color
                 Color col;
 
@@ -314,15 +320,34 @@ namespace Raycasting
                             break;
                         }
                 }
-
+                
                 // give x and y sides different brightnesses
                 if (side == 1)
                 {
                     col = Color.Multiply(col, 0.5f);
                 }
+                */
+
+                // texturing calculations
+                int texNum = level.area[mapX, mapY] - 1;  // subtract 1 so that the texture at texture[0] can be used
+
+                // calculate value of wallX
+                double wallX; // where exactly the wall was hit
+                if (side == 1)
+                    wallX = rayPos.X + ((mapY - rayPos.Y + (1 - stepY) / 2) / rayDir.Y) * rayDir.X; 
+                else
+                    wallX = rayPos.Y + ((mapX - rayPos.X + (1 - stepX) / 2) / rayDir.X) * rayDir.Y;
+                wallX -= Math.Floor(wallX);
+
+                // x coordinate of the texture 
+                int texX = (int) (wallX * (double)(TEXTURE_WIDTH));
+                if (side == 0 && rayDir.X > 0)
+                    texX = TEXTURE_WIDTH - texX - 1;
+                else if (side == 1 && rayDir.Y < 0)
+                    texX = TEXTURE_WIDTH - texX - 1;
 
                 // draw the pixels of the stripe as a vertical line
-                b.Draw(pix, new Rectangle(x, drawStart, 1, drawEnd - drawStart), col);
+                b.Draw(texture[texNum], new Rectangle(x, drawStart, 1, drawEnd - drawStart), new Rectangle(texX, 0, 1, TEXTURE_HEIGHT), Color.White);
             }
         }
     }
