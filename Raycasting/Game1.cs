@@ -22,8 +22,8 @@ namespace Raycasting
         public static double ROTATION_MOD = .05;
 
         // Texture width and height
-        public static int TEXTURE_WIDTH = 72;
-        public static int TEXTURE_HEIGHT = 72;
+        public static int TEXTURE_WIDTH = 24;
+        public static int TEXTURE_HEIGHT = 24;
 
         // the number of textures used in-game
         public static int NUM_TEXTURES = 8;
@@ -31,9 +31,12 @@ namespace Raycasting
         // VARIABLES
         /////
 
-        // Graphics Stuff
+        // Rendering and graphics
         GraphicsDeviceManager graphics;
         SpriteBatch spriteBatch;
+        Texture2D canvas;  // used to convert the buffer to a single texture to be drawn
+        Color[] buffer;  // screen buffer with raw color data to be drawn
+        Color[][] rawData;  // raw data of the individual external textures
 
         // used to calculate fps 
         double time = 0;  // time of current frame
@@ -53,7 +56,7 @@ namespace Raycasting
         MouseState mState;
 
         // texture array, each element is a separate square texture
-        Texture2D[] texture = new Texture2D[NUM_TEXTURES];
+        Texture2D[] texture;
 
         // sprite font for writing text
         protected SpriteFont font; 
@@ -76,12 +79,25 @@ namespace Raycasting
         /// </summary>
         protected override void Initialize()
         {
+            // initialize graphics rendering objects
+            canvas = new Texture2D(GraphicsDevice, SCREEN_WIDTH, SCREEN_HEIGHT);
+            buffer = new Color[SCREEN_WIDTH * SCREEN_HEIGHT];
+
+            // initialize texture array
+            texture = new Texture2D[NUM_TEXTURES];
+
             // initialize player and level
             player = new Player();
             level = new Map();
 
             // get initial mouse states
             mState = Mouse.GetState();
+
+            rawData = new Color[NUM_TEXTURES][];
+            for (int i = 0; i < NUM_TEXTURES; i++)
+            {
+                rawData[i] = new Color[SCREEN_WIDTH * SCREEN_HEIGHT];
+            }
 
             base.Initialize();
         }
@@ -96,6 +112,7 @@ namespace Raycasting
             spriteBatch = new SpriteBatch(GraphicsDevice);
 
             // load textures
+            // TODO: Put these into a single atlas, split it up when converting to raw color data
             pix = Content.Load<Texture2D>("dot");
             texture[0] = Content.Load<Texture2D>("terrain/grayvat");
             texture[1] = Content.Load<Texture2D>("terrain/redwall");
@@ -105,6 +122,12 @@ namespace Raycasting
             texture[5] = Content.Load<Texture2D>("terrain/graybookshelf");
             texture[6] = Content.Load<Texture2D>("terrain/graywindow");
             texture[7] = Content.Load<Texture2D>("terrain/graywarningdoor");
+
+            // convert textures into raw color data
+            for (int i = 0; i < NUM_TEXTURES; i++)
+            {
+                texture[i].GetData<Color>(rawData[i]);
+            }
 
             // load font
             font = Content.Load<SpriteFont>("General");
@@ -297,11 +320,11 @@ namespace Raycasting
 
                 // calculate lowest and highest pixel to fill in current stripe 
                 int drawStart = (-lineHeight) / 2 + SCREEN_HEIGHT / 2;
-                //if (drawStart < 0)
-                //    drawStart = 0;
+                if (drawStart < 0)
+                    drawStart = 0;
                 int drawEnd = lineHeight / 2 + SCREEN_HEIGHT / 2;
-                //if (drawEnd >= SCREEN_HEIGHT)
-                //    drawEnd = SCREEN_HEIGHT - 1;
+                if (drawEnd >= SCREEN_HEIGHT)
+                    drawEnd = SCREEN_HEIGHT - 1;
 
                 /* NOT USED WITH TEXTURED RAYCASTER
                 // choose wall color
@@ -362,8 +385,79 @@ namespace Raycasting
                     texX = TEXTURE_WIDTH - texX - 1;
 
                 // draw the pixels of the stripe as a vertical line
-                b.Draw(texture[texNum], new Rectangle(x, drawStart, 1, drawEnd - drawStart), new Rectangle(texX, 0, 1, TEXTURE_HEIGHT), Color.White);
+                //b.Draw(texture[texNum], new Rectangle(x, drawStart, 1, drawEnd - drawStart), new Rectangle(texX, 0, 1, TEXTURE_HEIGHT), Color.White);
+
+                for(int y = drawStart; y < drawEnd; y++)
+                {
+                    int d = y * 256 - SCREEN_HEIGHT * 128 + lineHeight * 128;
+                    int texY = ((d * TEXTURE_HEIGHT) / lineHeight) / 256;
+                    if (texY < 0) texY = TEXTURE_WIDTH * TEXTURE_HEIGHT;
+                    // darken one side to give a shadow effect
+                    // Lags for some reason I don't understand. I'll come back to this
+                    //if (side == 1)
+                    //    buffer[SCREEN_WIDTH * y + x] = Color.Multiply(rawData[texNum][TEXTURE_WIDTH * texY + texX], 0.5f);
+                    //else
+                    //    buffer[SCREEN_WIDTH * y + x] = rawData[texNum][TEXTURE_WIDTH * texY + texX];
+                    buffer[SCREEN_WIDTH * y + x] = rawData[texNum][TEXTURE_WIDTH * texY + texX];
+                }
+
+                // FLOOR CASTING
+                double floorXWall, floorYWall; // x, y position of the floor texel at the bottom of the wall
+
+                // 4 different wall directions possible
+                if (side == 0 && rayDir.X > 0)
+                {
+                    floorXWall = mapX;
+                    floorYWall = mapY + wallX;
+                }
+                else if (side == 0 && rayDir.X < 0)
+                {
+                    floorXWall = mapX + 1.0;
+                    floorYWall = mapY + wallX;
+                }
+                else if (side == 1 && rayDir.Y > 0)
+                {
+                    floorXWall = mapX + wallX;
+                    floorYWall = mapY;
+                }
+                else
+                {
+                    floorXWall = mapX + wallX;
+                    floorYWall = mapY + 1.0;
+                }
+
+                double distWall, distPlayer, currentDist;
+
+                distWall = perpWallDist;
+                distPlayer = 0.0;
+
+                if (drawEnd < 0) drawEnd = SCREEN_HEIGHT;
+
+                // draw the floor from drawEnd to the bottom of the screen
+                for (int y = drawEnd + 1; y < SCREEN_HEIGHT; y++)
+                {
+                    currentDist = SCREEN_HEIGHT / (2.0 * y - SCREEN_HEIGHT);
+
+                    double weight = (currentDist - distPlayer) / (distWall - distPlayer);
+
+                    double currentFloorX = weight * floorXWall + (1.0 - weight) * player.position.X;
+                    double currentFloorY = weight * floorYWall + (1.0 - weight) * player.position.Y;
+
+                    int floorTexX, floorTexY;
+                    floorTexX = (int)(currentFloorX * TEXTURE_WIDTH) % TEXTURE_WIDTH;
+                    floorTexY = (int)(currentFloorY * TEXTURE_HEIGHT) % TEXTURE_HEIGHT;
+
+                    // floor
+                    buffer[SCREEN_WIDTH * y + x] = rawData[3][TEXTURE_WIDTH * floorTexY + floorTexX];
+                    // ceiling
+                    buffer[SCREEN_WIDTH * (SCREEN_HEIGHT - y) + x] = rawData[4][TEXTURE_WIDTH * floorTexY + floorTexX];
+                }
+
+                
             }
+
+            canvas.SetData<Color>(buffer);
+            b.Draw(canvas, new Rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT), Color.White);
         }
     }
 }
