@@ -26,7 +26,7 @@ namespace Raycasting
         public static int TEXTURE_HEIGHT = 24;
 
         // the number of textures used in-game
-        public static int NUM_TEXTURES = 8;
+        public static int NUM_TEXTURES = 10;
 
         // VARIABLES
         /////
@@ -122,6 +122,8 @@ namespace Raycasting
             texture[5] = Content.Load<Texture2D>("terrain/graybookshelf");
             texture[6] = Content.Load<Texture2D>("terrain/graywindow");
             texture[7] = Content.Load<Texture2D>("terrain/graywarningdoor");
+            texture[8] = Content.Load<Texture2D>("terrain/grayfloor");
+            texture[9] = Content.Load<Texture2D>("terrain/greenfloor");
 
             // convert textures into raw color data
             for (int i = 0; i < NUM_TEXTURES; i++)
@@ -448,9 +450,9 @@ namespace Raycasting
                     floorTexY = (int)(currentFloorY * TEXTURE_HEIGHT) % TEXTURE_HEIGHT;
 
                     // floor
-                    buffer[SCREEN_WIDTH * y + x] = rawData[3][TEXTURE_WIDTH * floorTexY + floorTexX];
+                    buffer[SCREEN_WIDTH * y + x] = rawData[8][TEXTURE_WIDTH * floorTexY + floorTexX];
                     // ceiling
-                    buffer[SCREEN_WIDTH * (SCREEN_HEIGHT - y) + x] = rawData[4][TEXTURE_WIDTH * floorTexY + floorTexX];
+                    buffer[SCREEN_WIDTH * (SCREEN_HEIGHT - y) + x] = rawData[9][TEXTURE_WIDTH * floorTexY + floorTexX];
                 }
 
                 
