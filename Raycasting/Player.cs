@@ -20,7 +20,7 @@ namespace Raycasting
         // Constructor
         public Player()
         {
-            position = new Vector2(22f, 22f);
+            position = new Vector2(22f, 11.5f);
             direction = new Vector2(-1f, 0f);
             cameraPlane = new Vector2(0f, 0.66f);
         }

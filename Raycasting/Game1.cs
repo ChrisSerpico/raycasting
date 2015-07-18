@@ -26,7 +26,7 @@ namespace Raycasting
         public static int TEXTURE_HEIGHT = 24;
 
         // the number of textures used in-game
-        public static int NUM_TEXTURES = 10;
+        public static int NUM_TEXTURES = 13;
 
         // VARIABLES
         /////
@@ -61,6 +61,9 @@ namespace Raycasting
         // sprite font for writing text
         protected SpriteFont font; 
 
+        // 1-dimensional zbuffer
+        double[] ZBuffer = new double[SCREEN_WIDTH];
+
         public Game1()
         {
             graphics = new GraphicsDeviceManager(this);
@@ -88,7 +91,34 @@ namespace Raycasting
 
             // initialize player and level
             player = new Player();
-            level = new Map();
+            Sprite[] spArray = {
+                                   // green light in front of player start
+                                   new Sprite(new Vector2(20.5f, 11.5f), 12),
+                                   // green lights in every room
+                                   new Sprite(new Vector2(18.5f, 4.5f), 12),
+                                   new Sprite(new Vector2(10f, 4.5f), 12),
+                                   new Sprite(new Vector2(10f, 12.5f), 12),
+                                   new Sprite(new Vector2(3.5f, 6.5f), 12),
+                                   new Sprite(new Vector2(3.5f, 20.5f), 12),
+                                   new Sprite(new Vector2(3.5f, 14.5f), 12),
+                                   new Sprite(new Vector2(14.5f, 20.5f), 12),
+
+                                   // row of crates in front of wall
+                                   new Sprite(new Vector2(18.5f, 10.5f), 11),
+                                   new Sprite(new Vector2(18.5f, 11.5f), 11),
+                                   new Sprite(new Vector2(18.5f, 11.5f), 11),
+
+                                   // some chairs around the map
+                                   new Sprite(new Vector2(21.5f, 1.5f), 10),
+                                   new Sprite(new Vector2(15.5f, 1.5f), 10),
+                                   new Sprite(new Vector2(16f, 1.8f), 10),
+                                   new Sprite(new Vector2(16.2f, 1.2f), 10),
+                                   new Sprite(new Vector2(3.5f, 2.5f), 10),
+                                   new Sprite(new Vector2(9.5f, 15.5f), 10),
+                                   new Sprite(new Vector2(10f, 15.1f), 10),
+                                   new Sprite(new Vector2(10.5f, 15.8f), 10),
+                               };
+            level = new Map(spArray, 19);
 
             // get initial mouse states
             mState = Mouse.GetState();
@@ -114,6 +144,7 @@ namespace Raycasting
             // load textures
             // TODO: Put these into a single atlas, split it up when converting to raw color data
             pix = Content.Load<Texture2D>("dot");
+            // load terrain textures
             texture[0] = Content.Load<Texture2D>("terrain/grayvat");
             texture[1] = Content.Load<Texture2D>("terrain/redwall");
             texture[2] = Content.Load<Texture2D>("terrain/damagedgraywall");
@@ -124,6 +155,10 @@ namespace Raycasting
             texture[7] = Content.Load<Texture2D>("terrain/graywarningdoor");
             texture[8] = Content.Load<Texture2D>("terrain/grayfloor");
             texture[9] = Content.Load<Texture2D>("terrain/greenfloor");
+            // load sprite textures
+            texture[10] = Content.Load<Texture2D>("object/chair");
+            texture[11] = Content.Load<Texture2D>("object/crate");
+            texture[12] = Content.Load<Texture2D>("object/greenlight");
 
             // convert textures into raw color data
             for (int i = 0; i < NUM_TEXTURES; i++)
@@ -403,6 +438,9 @@ namespace Raycasting
                     buffer[SCREEN_WIDTH * y + x] = rawData[texNum][TEXTURE_WIDTH * texY + texX];
                 }
 
+                // SET THE ZBUFFER FOR THE SPRITE CASTING
+                ZBuffer[x] = perpWallDist;  // perpendicular distance is used
+
                 // FLOOR CASTING
                 double floorXWall, floorYWall; // x, y position of the floor texel at the bottom of the wall
 
@@ -454,12 +492,109 @@ namespace Raycasting
                     // ceiling
                     buffer[SCREEN_WIDTH * (SCREEN_HEIGHT - y) + x] = rawData[9][TEXTURE_WIDTH * floorTexY + floorTexX];
                 }
+            }
 
-                
+            // SPRITE CASTING
+            // sort sprites from far to close
+            for (int i = 0; i < level.numSprites; i++)
+            {
+                level.spriteOrder[i] = i;
+                level.spriteDistance[i] = ((player.position.X - level.sprites[i].position.X) * (player.position.X - level.sprites[i].position.X)
+                    + (player.position.Y - level.sprites[i].position.Y) * (player.position.Y - level.sprites[i].position.Y));
+            }
+            CombSort(level.spriteOrder, level.spriteDistance, level.numSprites);
+
+            // after sorting the sprites, do the projection and then draw them
+            for (int i = 0; i < level.numSprites; i++)
+            {
+                // translate sprite position relative to camera
+                double spriteX = level.sprites[level.spriteOrder[i]].position.X - player.position.X;
+                double spriteY = level.sprites[level.spriteOrder[i]].position.Y - player.position.Y; 
+
+                // transform sprite with the inverse camera matrix (1/(ad-bc))
+                double invDet = 1.0 / (player.cameraPlane.X * player.direction.Y - player.direction.X * player.cameraPlane.Y);
+
+                double transformX = invDet * (player.direction.Y * spriteX - player.direction.X * spriteY);
+                double transformY = invDet * (-player.cameraPlane.Y * spriteX + player.cameraPlane.X * spriteY);
+
+                int spriteScreenX = (int)((SCREEN_WIDTH / 2) * (1 + transformX / transformY));
+
+                // calculate height of sprite on screen
+                int spriteHeight = Math.Abs((int)(SCREEN_HEIGHT / transformY));
+                // calculate lowest and highest pixel to fill in current stripe
+                int drawStartY = -spriteHeight / 2 + SCREEN_HEIGHT / 2;
+                if (drawStartY < 0)
+                    drawStartY = 0;
+                int drawEndY = spriteHeight / 2 + SCREEN_HEIGHT / 2;
+                if (drawEndY >= SCREEN_HEIGHT)
+                    drawEndY = SCREEN_HEIGHT - 1;
+
+                // calculate width of the sprite
+                int spriteWidth = Math.Abs((int)(SCREEN_HEIGHT / transformY));
+                int drawStartX = -spriteWidth / 2 + spriteScreenX;
+                if (drawStartX < 0)
+                    drawStartX = 0;
+                int drawEndX = spriteWidth / 2 + spriteScreenX;
+                if (drawEndX >= SCREEN_WIDTH)
+                    drawEndX = SCREEN_WIDTH - 1;
+
+                // loop through every vertical stripe of the sprite on screen
+                for (int stripe = drawStartX; stripe < drawEndX; stripe++)
+                {
+                    int texX = (int)(256 * (stripe - (-spriteWidth / 2 + spriteScreenX)) * TEXTURE_WIDTH / spriteWidth) / 256;
+                    // the conditions of the if are:
+                    // 1. it's in front of the camera plane so we don't draw things behind the player
+                    // 2. it's on the screen (left or right)
+                    // 3. ZBuffer, with perpendicular distance
+                    if (transformY > 0 && stripe > 0 && stripe < SCREEN_WIDTH && transformY < ZBuffer[stripe])
+                    {
+                        for (int y = drawStartY; y < drawEndY; y++) // for every pixel of the current stripe
+                        {
+                            int d = (y) * 256 - SCREEN_HEIGHT * 128 + spriteHeight * 128;
+                            int texY = ((d * TEXTURE_HEIGHT) / spriteHeight) / 256;
+                            Color toAdd = rawData[level.sprites[level.spriteOrder[i]].texture][TEXTURE_WIDTH * texY + texX];
+                            if ((toAdd.PackedValue & 0x00FFFFFF) != 0) buffer[SCREEN_WIDTH * y + stripe] = toAdd;
+                        }
+                    }
+                }
             }
 
             canvas.SetData<Color>(buffer);
             b.Draw(canvas, new Rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT), Color.White);
+        }
+
+        // sort algorithm
+        void CombSort(int[] order, double[] dist, int amount)
+        {
+            int tempint;
+            double tempdouble;
+            int gap = amount;
+            bool swapped = false;
+            while (gap > 1 || swapped)
+            {
+                // shrink factor of 1.3
+                gap = (gap * 10) / 13;
+                if (gap == 9 || gap == 10)
+                    gap = 11;
+                if (gap < 1)
+                    gap = 1;
+                swapped = false;
+                for (int i = 0; i < amount - gap; i++)
+                {
+                    int j = i + gap;
+                    if (dist[i] < dist[j])
+                    {
+                        tempdouble = dist[i];
+                        dist[i] = dist[j];
+                        dist[j] = tempdouble;
+
+                        tempint = order[i];
+                        order[i] = order[j];
+                        order[j] = tempint;
+                        swapped = true;
+                    }
+                }
+            }
         }
     }
 }
